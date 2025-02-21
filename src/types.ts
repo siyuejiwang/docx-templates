@@ -183,6 +183,19 @@ export type Context = {
   // To verfiy we don't have a nested if within the same p or tr tag
   pIfCheckMap: Map<Node, string>;
   trIfCheckMap: Map<Node, string>;
+  tableMergeState?: {
+    currentRow: number;
+    currentCol: number;
+    mergeMatrix: Map<
+      string,
+      {
+        vMerge?: 'restart' | 'continue';
+        hMerge?: number;
+      }
+    >;
+    pendingCellData?: any; // 存储通过指令获取的单元格数据
+    currentCell?: NonTextNode; // 存储当前正在处理的单元格节点
+  };
 };
 
 export type Images = { [id: string]: Image };
@@ -282,6 +295,7 @@ export const BUILT_IN_COMMANDS = [
   'IF',
   'END-IF',
   'INS',
+  'MERGE',
   'EXEC',
   'IMAGE',
   'LINK',

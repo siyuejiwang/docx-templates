@@ -475,6 +475,58 @@ export async function walkTemplate(
           errors.push(...result);
         }
       }
+      if (!nodeIn._fTextNode) {
+        const tag = nodeIn._tag;
+        console.log('tag', tag);
+
+        if (tag === 'w:tbl') {
+          ctx.tableMergeState = {
+            currentRow: 0,
+            currentCol: 0,
+            mergeMatrix: new Map(),
+          };
+        } else if (tag === 'w:tr') {
+          if (ctx.tableMergeState) {
+            ctx.tableMergeState.currentRow++;
+            ctx.tableMergeState.currentCol = 0;
+          }
+        } else if (tag === 'w:tc') {
+          if (ctx.tableMergeState) {
+            if (ctx.tableMergeState.currentCell) {
+              const mergeInfo = checkDataMergeProps(
+                ctx.tableMergeState.pendingCellData
+              );
+              console.log('pendingCellData', mergeInfo);
+              if (mergeInfo.vMerge || mergeInfo.hMerge) {
+                const key = `${ctx.tableMergeState.currentRow},${ctx.tableMergeState.currentCol}`;
+                ctx.tableMergeState.mergeMatrix.set(key, mergeInfo);
+                processCellMerge(ctx.tableMergeState.currentCell, ctx);
+              }
+              // Clear pending data after processing
+              delete ctx.tableMergeState.pendingCellData;
+              ctx.tableMergeState.currentCell = undefined;
+            }
+            ctx.tableMergeState.currentCol++;
+            ctx.tableMergeState.currentCell = newNode as NonTextNode;
+            // Process cell merge when entering the cell
+            // console.log('pendingCellData', ctx.tableMergeState.pendingCellData);
+            // if (ctx.tableMergeState.pendingCellData) {
+            //   const mergeInfo = checkDataMergeProps(
+            //     ctx.tableMergeState.pendingCellData
+            //   );
+            //   console.log('pendingCellData', mergeInfo);
+            //   if (mergeInfo.vMerge || mergeInfo.hMerge) {
+            //     const key = `${ctx.tableMergeState.currentRow},${ctx.tableMergeState.currentCol}`;
+            //     ctx.tableMergeState.mergeMatrix.set(key, mergeInfo);
+            //     processCellMerge(newNode as NonTextNode, ctx);
+            //   }
+            //   // Clear pending data after processing
+            //   delete ctx.tableMergeState.pendingCellData;
+            //   ctx.tableMergeState.currentCell = undefined;
+            // }
+          }
+        }
+      }
 
       // Execute the move in the output tree
       nodeOut = newNode;
@@ -558,7 +610,9 @@ const processText = async (
     const segment = segments[idx];
     // logger.debug(`Token: '${segment}' (${ctx.fCmd})`);
     if (ctx.fCmd) ctx.cmd += segment;
-    else if (!isLoopExploring(ctx)) outText += segment;
+    else if (!isLoopExploring(ctx)) {
+      outText += segment;
+    }
     appendTextToTagBuffers(segment, ctx, { fCmd: ctx.fCmd });
 
     // If there are more segments, execute the command (if we are in "command mode"),
@@ -712,8 +766,30 @@ const processCmd: CommandProcessor = async (
         );
         if (html != null) await processHtml(ctx, html);
       }
+    } else if (cmdName === 'MERGE') {
+      if (!isLoopExploring(ctx)) {
+        if (!ctx.tableMergeState) {
+          throw new InvalidCommandError(
+            'MERGE command outside table context',
+            cmd
+          );
+        }
+        try {
+          const result = await runUserJsAndGetRaw(data, cmdRest, ctx);
+          console.log('result', result);
+          if (typeof result !== 'object') {
+            throw new InvalidCommandError('Invalid MERGE parameters', cmd);
+          }
 
-      // Invalid command
+          // 如果在表格单元格中，保存结果用于合并处理
+          if (ctx.tableMergeState?.currentCell) {
+            ctx.tableMergeState.pendingCellData = result;
+          }
+          return '';
+        } catch (err) {
+          throw new InvalidCommandError('Error processing MERGE command', cmd);
+        }
+      }
     } else throw new CommandSyntaxError(cmd);
     return;
   } catch (err) {
@@ -724,6 +800,86 @@ const processCmd: CommandProcessor = async (
     return err;
   }
 };
+function processCellMerge(node: NonTextNode, ctx: Context) {
+  console.log('processCellMerge');
+  if (!ctx.tableMergeState) return;
+
+  const key = `${ctx.tableMergeState.currentRow},${ctx.tableMergeState.currentCol}`;
+
+  // 从 mergeMatrix 获取显式设置的合并信息
+  const dataMergeInfo = ctx.tableMergeState.mergeMatrix.get(key);
+  console.log('dataMergeInfo', dataMergeInfo);
+
+  // 合并两种来源的信息，优先使用显式设置的
+  const finalMergeInfo = {
+    vMerge: dataMergeInfo?.vMerge,
+    hMerge: dataMergeInfo?.hMerge,
+  };
+
+  if (!finalMergeInfo.vMerge && !finalMergeInfo.hMerge) return;
+
+  // 处理垂直合并
+  if (finalMergeInfo.vMerge) {
+    const tcPr = ensureTcPr(node);
+    updateOrCreateChild(tcPr, 'w:vMerge', { val: finalMergeInfo.vMerge });
+  }
+
+  // 处理水平合并
+  if (finalMergeInfo.hMerge) {
+    const tcPr = ensureTcPr(node);
+    updateOrCreateChild(tcPr, 'w:gridSpan', { val: finalMergeInfo.hMerge });
+  }
+}
+
+function ensureTcPr(node: NonTextNode): NonTextNode {
+  let tcPr = node._children.find(
+    child => !child._fTextNode && child._tag === 'w:tcPr'
+  ) as NonTextNode | undefined;
+
+  if (!tcPr) {
+    tcPr = newNonTextNode('w:tcPr', {}, []);
+    node._children.unshift(tcPr);
+  }
+
+  return tcPr;
+}
+
+function updateOrCreateChild(
+  node: NonTextNode,
+  tag: string,
+  attrs: Record<string, any>
+) {
+  const child = node._children.find(c => !c._fTextNode && c._tag === tag) as
+    | NonTextNode
+    | undefined;
+
+  if (child) {
+    child._attrs = attrs;
+  } else {
+    node._children.push(newNonTextNode(tag, attrs));
+  }
+}
+// 4. 辅助函数保持不变
+function checkDataMergeProps(data: any): {
+  vMerge?: 'restart' | 'continue';
+  hMerge?: number;
+} {
+  if (!data || typeof data !== 'object') {
+    return {};
+  }
+
+  const result: { vMerge?: 'restart' | 'continue'; hMerge?: number } = {};
+
+  if (data.vMerge && ['restart', 'continue'].includes(data.vMerge)) {
+    result.vMerge = data.vMerge;
+  }
+
+  if (Number.isInteger(data.hMerge) && data.hMerge > 1) {
+    result.hMerge = data.hMerge;
+  }
+
+  return result;
+}
 
 const builtInRegexes = BUILT_IN_COMMANDS.map(word => new RegExp(`^${word}\\b`));
 
