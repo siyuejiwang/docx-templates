@@ -23,6 +23,7 @@ import {
   BUILT_IN_COMMANDS,
   ImageExtensions,
   NonTextNode,
+  GridSetting,
 } from './types';
 import {
   isError,
@@ -477,13 +478,16 @@ export async function walkTemplate(
       }
       if (!nodeIn._fTextNode) {
         const tag = nodeIn._tag;
-        console.log('tag', tag);
 
         if (tag === 'w:tbl') {
           ctx.tableMergeState = {
             currentRow: 0,
             currentCol: 0,
             mergeMatrix: new Map(),
+          };
+        } else if (tag === 'w:tblGrid') {
+          ctx.tableGridState = {
+            currentGrid: newNode as NonTextNode,
           };
         } else if (tag === 'w:tr') {
           if (ctx.tableMergeState) {
@@ -492,38 +496,8 @@ export async function walkTemplate(
           }
         } else if (tag === 'w:tc') {
           if (ctx.tableMergeState) {
-            if (ctx.tableMergeState.currentCell) {
-              const mergeInfo = checkDataMergeProps(
-                ctx.tableMergeState.pendingCellData
-              );
-              console.log('pendingCellData', mergeInfo);
-              if (mergeInfo.vMerge || mergeInfo.hMerge) {
-                const key = `${ctx.tableMergeState.currentRow},${ctx.tableMergeState.currentCol}`;
-                ctx.tableMergeState.mergeMatrix.set(key, mergeInfo);
-                processCellMerge(ctx.tableMergeState.currentCell, ctx);
-              }
-              // Clear pending data after processing
-              delete ctx.tableMergeState.pendingCellData;
-              ctx.tableMergeState.currentCell = undefined;
-            }
             ctx.tableMergeState.currentCol++;
             ctx.tableMergeState.currentCell = newNode as NonTextNode;
-            // Process cell merge when entering the cell
-            // console.log('pendingCellData', ctx.tableMergeState.pendingCellData);
-            // if (ctx.tableMergeState.pendingCellData) {
-            //   const mergeInfo = checkDataMergeProps(
-            //     ctx.tableMergeState.pendingCellData
-            //   );
-            //   console.log('pendingCellData', mergeInfo);
-            //   if (mergeInfo.vMerge || mergeInfo.hMerge) {
-            //     const key = `${ctx.tableMergeState.currentRow},${ctx.tableMergeState.currentCol}`;
-            //     ctx.tableMergeState.mergeMatrix.set(key, mergeInfo);
-            //     processCellMerge(newNode as NonTextNode, ctx);
-            //   }
-            //   // Clear pending data after processing
-            //   delete ctx.tableMergeState.pendingCellData;
-            //   ctx.tableMergeState.currentCell = undefined;
-            // }
           }
         }
       }
@@ -766,28 +740,64 @@ const processCmd: CommandProcessor = async (
         );
         if (html != null) await processHtml(ctx, html);
       }
-    } else if (cmdName === 'MERGE') {
+    } else if (cmdName === 'TBL_MERGE') {
       if (!isLoopExploring(ctx)) {
         if (!ctx.tableMergeState) {
           throw new InvalidCommandError(
-            'MERGE command outside table context',
+            'TBL_MERGE command outside table context',
             cmd
           );
         }
         try {
           const result = await runUserJsAndGetRaw(data, cmdRest, ctx);
-          console.log('result', result);
           if (typeof result !== 'object') {
-            throw new InvalidCommandError('Invalid MERGE parameters', cmd);
+            throw new InvalidCommandError('Invalid TBL_MERGE parameters', cmd);
           }
 
           // 如果在表格单元格中，保存结果用于合并处理
           if (ctx.tableMergeState?.currentCell) {
-            ctx.tableMergeState.pendingCellData = result;
+            const mergeInfo = checkDataMergeProps(result);
+            if (mergeInfo.vMerge || mergeInfo.hMerge) {
+              processCellMerge(ctx.tableMergeState.currentCell, mergeInfo, ctx);
+            }
+            // Clear currentCell
+            ctx.tableMergeState.currentCell = undefined;
           }
           return '';
         } catch (err) {
-          throw new InvalidCommandError('Error processing MERGE command', cmd);
+          console.log('grid merge err', err);
+          throw new InvalidCommandError(
+            'Error processing TBL_MERGE command',
+            cmd
+          );
+        }
+      }
+    } else if (cmdName === 'TBL_GRID') {
+      if (!isLoopExploring(ctx)) {
+        if (!ctx.tableGridState) {
+          throw new InvalidCommandError(
+            'TBL_GRID command outside table context',
+            cmd
+          );
+        }
+        try {
+          const result = await runUserJsAndGetRaw(data, cmdRest, ctx);
+          if (!Array.isArray(result)) {
+            throw new InvalidCommandError('Invalid TBL_GRID parameters', cmd);
+          }
+          // 根据单元格中的表格列数据，更新表格列宽
+          if (ctx.tableGridState.currentGrid) {
+            processGridSetting(ctx.tableGridState.currentGrid, result, ctx);
+            // Clear tableGridState
+            ctx.tableGridState = undefined;
+          }
+          return '';
+        } catch (err) {
+          console.log('processGridSetting err', err);
+          throw new InvalidCommandError(
+            'Error processing TBL_GRID command',
+            cmd
+          );
         }
       }
     } else throw new CommandSyntaxError(cmd);
@@ -800,15 +810,8 @@ const processCmd: CommandProcessor = async (
     return err;
   }
 };
-function processCellMerge(node: NonTextNode, ctx: Context) {
-  console.log('processCellMerge');
+function processCellMerge(node: NonTextNode, dataMergeInfo: any, ctx: Context) {
   if (!ctx.tableMergeState) return;
-
-  const key = `${ctx.tableMergeState.currentRow},${ctx.tableMergeState.currentCol}`;
-
-  // 从 mergeMatrix 获取显式设置的合并信息
-  const dataMergeInfo = ctx.tableMergeState.mergeMatrix.get(key);
-  console.log('dataMergeInfo', dataMergeInfo);
 
   // 合并两种来源的信息，优先使用显式设置的
   const finalMergeInfo = {
@@ -829,6 +832,26 @@ function processCellMerge(node: NonTextNode, ctx: Context) {
     const tcPr = ensureTcPr(node);
     updateOrCreateChild(tcPr, 'w:gridSpan', { val: finalMergeInfo.hMerge });
   }
+}
+
+function processGridSetting(
+  node: NonTextNode,
+  dataGridInfo: GridSetting[],
+  ctx: Context
+) {
+  if (!ctx.tableGridState) return;
+  console.log('dataGridInfo', dataGridInfo);
+  dataGridInfo.forEach((grid, gidx) => {
+    let gridCol = node._children[gidx];
+    if (!gridCol) {
+      gridCol = newNonTextNode('w:gridCol', {}, []);
+      node._children.unshift(gridCol);
+    }
+    const attrs: GridSetting = {};
+    grid.w && (attrs.w = grid.w);
+    grid.type && (attrs.type = grid.type);
+    (gridCol as NonTextNode)._attrs = attrs;
+  });
 }
 
 function ensureTcPr(node: NonTextNode): NonTextNode {

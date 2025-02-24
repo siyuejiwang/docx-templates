@@ -196,6 +196,9 @@ export type Context = {
     pendingCellData?: any; // 存储通过指令获取的单元格数据
     currentCell?: NonTextNode; // 存储当前正在处理的单元格节点
   };
+  tableGridState?: {
+    currentGrid: NonTextNode;
+  };
 };
 
 export type Images = { [id: string]: Image };
@@ -295,9 +298,15 @@ export const BUILT_IN_COMMANDS = [
   'IF',
   'END-IF',
   'INS',
-  'MERGE',
+  'TBL_MERGE',
+  'TBL_GRID',
   'EXEC',
   'IMAGE',
   'LINK',
   'HTML',
 ] as const;
+
+export type GridSetting = {
+  w?: string | QualifiedAttribute;
+  type?: 'dxa' | 'pct' | 'auto';
+};
