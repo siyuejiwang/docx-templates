@@ -492,20 +492,20 @@ export async function walkTemplate(
           }
         } else if (tag === 'w:tc') {
           if (ctx.tableMergeState) {
-            if (ctx.tableMergeState.currentCell) {
-              const mergeInfo = checkDataMergeProps(
-                ctx.tableMergeState.pendingCellData
-              );
-              console.log('pendingCellData', mergeInfo);
-              if (mergeInfo.vMerge || mergeInfo.hMerge) {
-                const key = `${ctx.tableMergeState.currentRow},${ctx.tableMergeState.currentCol}`;
-                ctx.tableMergeState.mergeMatrix.set(key, mergeInfo);
-                processCellMerge(ctx.tableMergeState.currentCell, ctx);
-              }
-              // Clear pending data after processing
-              delete ctx.tableMergeState.pendingCellData;
-              ctx.tableMergeState.currentCell = undefined;
-            }
+            // if (ctx.tableMergeState.currentCell) {
+            //   const mergeInfo = checkDataMergeProps(
+            //     ctx.tableMergeState.pendingCellData
+            //   );
+            //   console.log('pendingCellData', mergeInfo);
+            //   if (mergeInfo.vMerge || mergeInfo.hMerge) {
+            //     const key = `${ctx.tableMergeState.currentRow},${ctx.tableMergeState.currentCol}`;
+            //     ctx.tableMergeState.mergeMatrix.set(key, mergeInfo);
+            //     processCellMerge(ctx.tableMergeState.currentCell, ctx);
+            //   }
+            //   // Clear pending data after processing
+            //   delete ctx.tableMergeState.pendingCellData;
+            //   ctx.tableMergeState.currentCell = undefined;
+            // }
             ctx.tableMergeState.currentCol++;
             ctx.tableMergeState.currentCell = newNode as NonTextNode;
             // Process cell merge when entering the cell
@@ -783,7 +783,12 @@ const processCmd: CommandProcessor = async (
 
           // 如果在表格单元格中，保存结果用于合并处理
           if (ctx.tableMergeState?.currentCell) {
-            ctx.tableMergeState.pendingCellData = result;
+            const mergeInfo = checkDataMergeProps(result);
+            if (mergeInfo.vMerge || mergeInfo.hMerge) {
+              processCellMerge(ctx.tableMergeState.currentCell, mergeInfo, ctx);
+            }
+            // Clear currentCell
+            ctx.tableMergeState.currentCell = undefined;
           }
           return '';
         } catch (err) {
@@ -800,14 +805,10 @@ const processCmd: CommandProcessor = async (
     return err;
   }
 };
-function processCellMerge(node: NonTextNode, ctx: Context) {
+function processCellMerge(node: NonTextNode, dataMergeInfo: any, ctx: Context) {
   console.log('processCellMerge');
   if (!ctx.tableMergeState) return;
 
-  const key = `${ctx.tableMergeState.currentRow},${ctx.tableMergeState.currentCol}`;
-
-  // 从 mergeMatrix 获取显式设置的合并信息
-  const dataMergeInfo = ctx.tableMergeState.mergeMatrix.get(key);
   console.log('dataMergeInfo', dataMergeInfo);
 
   // 合并两种来源的信息，优先使用显式设置的
