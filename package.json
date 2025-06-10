@@ -1,6 +1,6 @@
 {
-  "name": "docx-templates-gw",
-  "version": "4.13.0",
+  "name": "docx-templates",
+  "version": "4.14.1",
   "description": "Template-based docx report creation",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -54,7 +54,7 @@
     "@typescript-eslint/parser": "^6.5.0",
     "buffer": "^6.0.3",
     "coveralls": "^3.0.13",
-    "esbuild": "^0.14.11",
+    "esbuild": "^0.25.0",
     "eslint": "^8.37.0",
     "eslint-config-prettier": "^8.8.0",
     "eslint-plugin-import": "^2.27.5",
