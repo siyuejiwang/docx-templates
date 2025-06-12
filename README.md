@@ -570,6 +570,8 @@ Define a name for a complete command (especially useful for formatting tables):
 
 ### `TBL_MERGE`
 Merge cells in a table.
+
+```
 ----------------------------------------------------------
 | Name                         | Since                   |
 ----------------------------------------------------------
@@ -581,6 +583,7 @@ Merge cells in a table.
 ----------------------------------------------------------
 | +++END-FOR person+++         |                         |
 ----------------------------------------------------------
+```
 
 person data structure:
 

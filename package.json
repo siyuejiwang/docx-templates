@@ -1,5 +1,5 @@
 {
-  "name": "docx-templates-gw",
+  "name": "gw-docx-templates",
   "version": "4.14.1",
   "description": "Template-based docx report creation",
   "main": "lib/index.js",
@@ -14,13 +14,13 @@
     "report",
     "template"
   ],
-  "homepage": "https://github.com/guigrpa/docx-templates#readme",
+  "homepage": "https://github.com/siyuejiwang/docx-templates#readme",
   "bugs": {
     "url": "https://github.com/guigrpa/docx-templates/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/guigrpa/docx-templates.git"
+    "url": "git+https://github.com/siyuejiwang/docx-templates.git"
   },
   "scripts": {
     "prepare": "yarn compile",
