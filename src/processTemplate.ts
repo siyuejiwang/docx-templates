@@ -916,7 +916,9 @@ function checkDataMergeProps(data: any): {
     result.vMerge = data.vMerge;
   }
 
-  if (Number.isInteger(data.hMerge) && data.hMerge > 1) {
+  const hMerge = Number(data.hMerge);
+
+  if (Number.isInteger(hMerge) && hMerge > 1) {
     result.hMerge = data.hMerge;
   }
 

@@ -568,6 +568,29 @@ Define a name for a complete command (especially useful for formatting tables):
 ----------------------------------------------------------
 ```
 
+### `TBL_MERGE`
+Merge cells in a table.
+----------------------------------------------------------
+| Name                         | Since                   |
+----------------------------------------------------------
+| +++FOR person IN             |                         |
+| project.people+++            |                         |
+----------------------------------------------------------
+| +++$person.name+++           | +++$person.since+++     |
+| +++TBL_MERGE $person+++      |                         |
+----------------------------------------------------------
+| +++END-FOR person+++         |                         |
+----------------------------------------------------------
+
+person data structure:
+
+{
+  name: 'John',
+  since: 2015,
+  vMerge?: "restart" | "continue",
+  hMerge?: "2"
+}
+
 ## Inserting literal XML
 You can also directly insert Office Open XML markup into the document using the `literalXmlDelimiter`, which is by default set to `||`.
 
