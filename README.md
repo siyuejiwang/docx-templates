@@ -42,6 +42,7 @@ Contributions are welcome!
     - [`FOR` and `END-FOR`](#for-and-end-for)
     - [`IF` and `END-IF`](#if-and-end-if)
     - [`ALIAS` (and alias resolution with `*`)](#alias-and-alias-resolution-with-)
+    - [`TBL_MERGE`](#table_merge)
   - [Inserting literal XML](#inserting-literal-xml)
 - [Error handling](#error-handling)
   - [Error types](#error-types)

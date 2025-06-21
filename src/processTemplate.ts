@@ -843,13 +843,13 @@ function processCellMerge(node: NonTextNode, dataMergeInfo: any, ctx: Context) {
   // 处理垂直合并
   if (finalMergeInfo.vMerge) {
     const tcPr = ensureTcPr(node);
-    updateOrCreateChild(tcPr, 'w:vMerge', { val: finalMergeInfo.vMerge });
+    updateOrCreateChild(tcPr, 'w:vMerge', { 'w:val': finalMergeInfo.vMerge });
   }
 
   // 处理水平合并
   if (finalMergeInfo.hMerge) {
     const tcPr = ensureTcPr(node);
-    updateOrCreateChild(tcPr, 'w:gridSpan', { val: finalMergeInfo.hMerge });
+    updateOrCreateChild(tcPr, 'w:gridSpan', { 'w:val': finalMergeInfo.hMerge });
   }
 }
 
