@@ -23,7 +23,6 @@ import {
   BUILT_IN_COMMANDS,
   ImageExtensions,
   NonTextNode,
-  GridSetting,
 } from './types';
 import {
   isError,
@@ -791,30 +790,75 @@ const processCmd: CommandProcessor = async (
           );
         }
       }
-    } else if (cmdName === 'TBL_GRID') {
+    } else if (cmdName === 'TBL_CELL') {
+      // TBL_CELL: 统一处理单元格合并和列宽
       if (!isLoopExploring(ctx)) {
-        if (!ctx.tableGridState) {
+        if (!ctx.tableMergeState && !ctx.tableGridState) {
           throw new InvalidCommandError(
-            'TBL_GRID command outside table context',
+            'TBL_CELL command outside table context',
             cmd
           );
         }
         try {
           const result = await runUserJsAndGetRaw(data, cmdRest, ctx);
-          if (!Array.isArray(result)) {
-            throw new InvalidCommandError('Invalid TBL_GRID parameters', cmd);
+          if (typeof result !== 'object') {
+            throw new InvalidCommandError('Invalid TBL_CELL parameters', cmd);
           }
-          // 根据单元格中的表格列数据，更新表格列宽
-          if (ctx.tableGridState.currentGrid) {
-            processGridSetting(ctx.tableGridState.currentGrid, result, ctx);
-            // Clear tableGridState
-            ctx.tableGridState = undefined;
+
+          // 处理单元格合并
+          if (ctx.tableMergeState?.currentCell) {
+            const mergeInfo = checkDataMergeProps(result);
+            if (mergeInfo.vMerge || mergeInfo.hMerge) {
+              processCellMerge(ctx.tableMergeState.currentCell, mergeInfo, ctx);
+            }
+            ctx.tableMergeState.currentCell = undefined;
           }
+
+          // 处理列宽设置
+          if (ctx.tableGridState?.currentGrid) {
+            // 获取当前单元格已有的 gridSpan（从模板中带来的合并）
+            const existingGridSpan = getExistingGridSpan(
+              ctx.tableMergeState?.currentCell
+            );
+            // 获取运行时新设置的 hMerge
+            const mergeInfo = checkDataMergeProps(result);
+            const runtimeHMerge = mergeInfo.hMerge || 1;
+
+            // 计算实际占用的列数（取模板已有的和运行时设置中较大的）
+            const effectiveSpan = Math.max(existingGridSpan, runtimeHMerge);
+
+            // 计算列索引：
+            // 使用当前循环的 idx 来确定当前数据项在数组中的索引（从0开始）
+            // 注意：不需要加上 templateColOffset，因为 FOR 循环复制模板行时
+            // 每个数据项都是从头开始排列的
+            const curLoop = getCurLoop(ctx);
+            const dataItemIdx = curLoop ? curLoop.idx : 0;
+            const colIdx = dataItemIdx;
+
+            // 无论是否设置了宽度，都确保有足够的 gridCol
+            ensureGridColsEnough(
+              ctx.tableGridState.currentGrid,
+              colIdx,
+              effectiveSpan,
+              ctx
+            );
+
+            // 如果设置了宽度，才设置宽度
+            if (result.w || result.type) {
+              processSingleColumnWidth(
+                ctx.tableGridState.currentGrid,
+                colIdx,
+                result,
+                ctx
+              );
+            }
+          }
+
           return '';
         } catch (err) {
-          console.log('processGridSetting err', err);
+          console.log('TBL_CELL err', err);
           throw new InvalidCommandError(
-            'Error processing TBL_GRID command',
+            'Error processing TBL_CELL command',
             cmd
           );
         }
@@ -853,24 +897,106 @@ function processCellMerge(node: NonTextNode, dataMergeInfo: any, ctx: Context) {
   }
 }
 
-function processGridSetting(
+/**
+ * 获取当前单元格已有的 gridSpan 值（从模板中带来的）
+ * @param cellNode w:tc 节点
+ * @returns 已有的 gridSpan 值（默认为 1）
+ */
+function getExistingGridSpan(cellNode?: NonTextNode): number {
+  if (!cellNode) return 1;
+
+  const tcPr = cellNode._children.find(
+    child => !child._fTextNode && (child as NonTextNode)._tag === 'w:tcPr'
+  ) as NonTextNode | undefined;
+
+  if (!tcPr) return 1;
+
+  const gridSpan = tcPr._children.find(
+    child => !child._fTextNode && (child as NonTextNode)._tag === 'w:gridSpan'
+  ) as NonTextNode | undefined;
+  if (!gridSpan) return 1;
+
+  const spanVal = gridSpan._attrs['w:val'];
+  if (spanVal) {
+    return Number.parseInt(spanVal as string, 10) || 1;
+  }
+  return 1;
+}
+
+/**
+ * 设置单个列的宽度 (用于 TBL_CELL 指令)
+ * @param node w:tblGrid 节点
+ * @param colIdx 列索引
+ * @param config TBL_CELL 配置，包含 w、type 和 hMerge
+ * @param ctx 上下文
+ */
+
+/**
+ * 确保 w:tblGrid 下有足够的 w:gridCol 元素
+ * 当 FOR 循环动态生成更多列时，需要扩展 gridCol 数量
+ * @param node w:tblGrid 节点
+ * @param colIdx 起始列索引
+ * @param spanCount 需要占用的列数
+ */
+function ensureGridColsEnough(
   node: NonTextNode,
-  dataGridInfo: GridSetting[],
+  colIdx: number,
+  spanCount: number,
+  ctx: Context
+) {
+  // 计算需要确保的最后一个列索引
+  const requiredLastColIdx = colIdx + spanCount - 1;
+  const currentCount = node._children.length;
+
+  // 如果当前列数已经足够，直接返回
+  if (currentCount > requiredLastColIdx) {
+    return;
+  }
+
+  // 更新 maxCols 记录
+  const maxCols = ctx.tableGridState?.maxCols || 0;
+  if (requiredLastColIdx + 1 > maxCols) {
+    ctx.tableGridState!.maxCols = requiredLastColIdx + 1;
+  }
+
+  // 添加缺失的 gridCol
+  // 注意：只在末尾添加，不在中间插入，因为 gridCol 的顺序应该与列顺序一致
+  const toAdd = requiredLastColIdx - currentCount + 1;
+  for (let i = 0; i < toAdd; i++) {
+    const gridCol = newNonTextNode('w:gridCol', { 'w:w': '1500' }, []);
+    node._children.push(gridCol);
+  }
+}
+
+function processSingleColumnWidth(
+  node: NonTextNode,
+  colIdx: number,
+  config: { w?: any; type?: string; hMerge?: number },
   ctx: Context
 ) {
   if (!ctx.tableGridState) return;
-  console.log('dataGridInfo', dataGridInfo);
-  dataGridInfo.forEach((grid, gidx) => {
-    let gridCol = node._children[gidx];
-    if (!gridCol) {
-      gridCol = newNonTextNode('w:gridCol', {}, []);
-      node._children.unshift(gridCol);
+
+  // 计算跨越的列数（hMerge 表示跨几列）
+  const spanCount = config.hMerge || 1;
+
+  // 为所有被合并的列设置相同的宽度
+  for (let i = 0; i < spanCount; i++) {
+    const targetColIdx = colIdx + i;
+
+    // 获取已存在的 gridCol（应该由 ensureGridColsEnough 确保存在）
+    const gridCol = node._children[targetColIdx];
+    if (!gridCol) continue; // 如果不存在，跳过（不应该发生）
+
+    // 设置宽度属性
+    const attrs: Record<string, any> = {};
+    if (config.w) {
+      attrs.w = config.w;
     }
-    const attrs: GridSetting = {};
-    grid.w && (attrs.w = grid.w);
-    grid.type && (attrs.type = grid.type);
+    if (config.type) {
+      attrs.type = config.type;
+    }
     (gridCol as NonTextNode)._attrs = attrs;
-  });
+  }
 }
 
 function ensureTcPr(node: NonTextNode): NonTextNode {
@@ -919,7 +1045,7 @@ function checkDataMergeProps(data: any): {
   const hMerge = Number(data.hMerge);
 
   if (Number.isInteger(hMerge) && hMerge > 1) {
-    result.hMerge = data.hMerge;
+    result.hMerge = hMerge;
   }
 
   return result;

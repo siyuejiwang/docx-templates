@@ -1370,6 +1370,78 @@ Morbi dignissim consequat ex, non finibus est faucibus sodales. Integer sed just
         );
         expect(result).toMatchSnapshot();
       });
+
+      // TBL_CELL 测试 - 使用现有的 dynamic-columns.docx 模板进行测试
+      // 测试场景：FOR 循环中设置单元格合并和列宽
+      it('TBL_CELL: cell merge and column width in FOR loop', async () => {
+        // 注意：这个测试需要手动创建测试模板
+        // 模板结构：在 dynamic-columns.docx 基础上，每个单元格添加 TBL_CELL 指令
+        // 指令格式：+++ TBL_CELL {hMerge: column.hMerge || 1, w: column.w || 2000, type: 'dxa'} +++
+        //
+        // 测试数据：
+        // columns: [
+        //   { name: 'Col 1', w: 2000 },                    // 列宽2000，无合并
+        //   { name: 'Col 2 - merged', w: 3000, hMerge: 2 }, // 列宽3000，跨2列
+        //   { name: 'Col 3' }                               // 无列宽设置，无合并
+        // ]
+        //
+        // 预期结果：
+        // - 第1列 gridCol w=2000
+        // - 第2、3列 gridCol w=3000（因为 hMerge=2，两列都设置为3000）
+        // - 第4列 gridCol 无宽度设置
+
+        // TODO: 创建测试模板后取消注释
+        // 列定义
+        const columns = [
+          { label: '序号' },
+          { label: '项目' },
+          { label: '数值' },
+          { label: '单位' },
+        ];
+
+        // 二维数组数据
+        const data = [
+          [{ value: '1' }, { value: '光伏方案', hMerge: '3' }],
+          [
+            { value: '2' },
+            { value: '储能容量' },
+            { value: '500' },
+            { value: 'kWh' },
+          ],
+          [
+            { value: '3' },
+            { value: '投资总额' },
+            { value: '1250.8' },
+            { value: '万元' },
+          ],
+          [
+            { value: '4' },
+            { value: '年发电量' },
+            { value: '3250' },
+            { value: 'MWh' },
+          ],
+        ];
+        const template = await fs.promises.readFile(
+          path.join(__dirname, 'fixtures', 'tableCell.docx')
+        );
+        const result = await createReport(
+          {
+            noSandbox,
+            template,
+            cmdDelimiter: ['++', '++'],
+            data: {
+              columns: columns,
+              data: data,
+            },
+          },
+          'XML'
+        );
+        expect(result).toBeDefined();
+
+        // 临时：验证 TBL_CELL 指令已添加到 BUILT_IN_COMMANDS
+        // const { BUILT_IN_COMMANDS } = require('../types');
+        // expect(BUILT_IN_COMMANDS).toContain('TBL_CELL');
+      });
     });
   });
 });

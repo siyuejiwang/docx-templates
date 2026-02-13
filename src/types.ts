@@ -198,6 +198,7 @@ export type Context = {
   };
   tableGridState?: {
     currentGrid: NonTextNode;
+    maxCols?: number; // 记录表格的最大列数（用于确保 gridCol 足够）
   };
 };
 
@@ -299,14 +300,32 @@ export const BUILT_IN_COMMANDS = [
   'END-IF',
   'INS',
   'TBL_MERGE',
-  'TBL_GRID',
+  'TBL_CELL',
   'EXEC',
   'IMAGE',
   'LINK',
   'HTML',
 ] as const;
 
+// GridSetting 类型已废弃，请使用 TblCellConfig
+// eslint-disable-next-line import/no-unused-modules
 export type GridSetting = {
   w?: string | QualifiedAttribute;
+  type?: 'dxa' | 'pct' | 'auto';
+};
+
+/**
+ * TBL_CELL 指令配置类型
+ * 支持单元格合并和列宽设置
+ */
+// eslint-disable-next-line import/no-unused-modules
+export type TblCellConfig = {
+  /** 垂直合并: 'restart' 在起始单元格, 'continue' 在后续单元格 */
+  vMerge?: 'restart' | 'continue';
+  /** 水平合并: 跨列数量 */
+  hMerge?: number;
+  /** 列宽 (dxa 单位, 1 dxa = 1/1440 英寸) */
+  w?: string | QualifiedAttribute;
+  /** 宽度类型: dxa(固定值) / pct(百分比) / auto(自动) */
   type?: 'dxa' | 'pct' | 'auto';
 };

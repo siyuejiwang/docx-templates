@@ -104,8 +104,15 @@ const sanitizeText = (str: string, options: XmlOptions) => {
   return out;
 };
 
-const sanitizeAttr = (attr: string | QualifiedAttribute) => {
-  let out = typeof attr === 'string' ? attr : attr.value;
+const sanitizeAttr = (attr: string | number | QualifiedAttribute) => {
+  let out: string;
+  if (typeof attr === 'string') {
+    out = attr;
+  } else if (typeof attr === 'number') {
+    out = String(attr);
+  } else {
+    out = attr.value;
+  }
   out = out.replace(/&/g, '&amp;'); // must be the first one
   out = out.replace(/</g, '&lt;');
   out = out.replace(/>/g, '&gt;');
