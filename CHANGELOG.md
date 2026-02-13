@@ -1,3 +1,9 @@
+## 4.15.0 (2025-12-03)
+* [#432](https://github.com/guigrpa/docx-templates/pull/432): add `indentXml`, `preserveSpace` and `compressionLevel` options to let users trade readability for smaller file size when generating reports.
+* [#426](https://github.com/guigrpa/docx-templates/pull/426): allow `IMAGE` commands to emit empty Alt Text values instead of forcing the placeholder `"desc"`.
+* [#368](https://github.com/guigrpa/docx-templates/pull/368): pass the evaluated command code to `errorHandler` callbacks so they can inspect what failed.
+* Fix a minor typo in the README.
+
 ## 4.14.1 (2025-03-10)
 * Issue [#405](https://github.com/guigrpa/docx-templates/issues/405): fix "The requested module 'docx-templates' does not provide an export named 'default'" error by reverting "Add `"type": "module"` to `package.json`.". Rename Rollup config file to `.mjs` extension instead, which fixes the original Rollup problem.
 
