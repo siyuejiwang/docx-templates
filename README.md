@@ -589,8 +589,8 @@ Define a name for a complete command (especially useful for formatting tables):
 ----------------------------------------------------------
 ```
 
-### `TBL_MERGE`
-Merge cells in a table.
+### `TBL_CELL`
+Merge cells or set cell properties in a table.
 
 ```
 ----------------------------------------------------------
@@ -600,7 +600,7 @@ Merge cells in a table.
 | project.people+++            |                         |
 ----------------------------------------------------------
 | +++$person.name+++           | +++$person.since+++     |
-| +++TBL_MERGE $person+++      |                         |
+| +++TBL_CELL $person+++      |                         |
 ----------------------------------------------------------
 | +++END-FOR person+++         |                         |
 ----------------------------------------------------------
@@ -612,7 +612,8 @@ person data structure:
   name: 'John',
   since: 2015,
   vMerge?: "restart" | "continue",
-  hMerge?: "2"
+  hMerge?: "2",
+  w?: "1500",
 }
 
 ## Inserting literal XML
