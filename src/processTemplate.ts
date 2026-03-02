@@ -847,11 +847,11 @@ const processCmd: CommandProcessor = async (
 
             // 计算列索引：
             // 使用当前循环的 idx 来确定当前数据项在数组中的索引（从0开始）
-            // 注意：不需要加上 templateColOffset，因为 FOR 循环复制模板行时
-            // 每个数据项都是从头开始排列的
+            // 需要加上 FOR 循环开始时的列偏移量，因为循环前可能有固定单元格
             const curLoop = getCurLoop(ctx);
             const dataItemIdx = curLoop ? curLoop.idx : 0;
-            const colIdx = dataItemIdx;
+            const colOffset = ctx.tableGridState?.loopStartColOffset || 0;
+            const colIdx = colOffset + dataItemIdx;
 
             // 无论是否设置了宽度，都确保有足够的 gridCol
             ensureGridColsEnough(
@@ -1202,6 +1202,12 @@ const processForIf = async (
           cmd
         );
     }
+    // 记录 FOR 循环开始时的列偏移量（用于 TBL_CELL 计算正确的列索引）
+    if (!isIf && ctx.tableMergeState) {
+      ctx.tableGridState = ctx.tableGridState || { currentGrid: null as any };
+      ctx.tableGridState.loopStartColOffset = ctx.tableMergeState.currentCol;
+    }
+
     ctx.loops.push({
       refNode: node,
       refNodeLevel: ctx.level,
@@ -1281,6 +1287,13 @@ const processEndForIf = (
     curLoop.idx = nextIdx;
   } else {
     // loop finished
+    // 确保循环结束后有足够的 gridCol（处理循环后面还有固定列的情况）
+    if (!isIf && ctx.tableGridState?.currentGrid && ctx.tableMergeState) {
+      const currentCol = ctx.tableMergeState.currentCol;
+      ensureGridColsEnough(ctx.tableGridState.currentGrid, currentCol, 1, ctx);
+      // 清除循环开始时的列偏移量记录
+      ctx.tableGridState.loopStartColOffset = undefined;
+    }
     ctx.loops.pop();
   }
 };

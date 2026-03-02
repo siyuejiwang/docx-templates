@@ -220,6 +220,7 @@ export type Context = {
   tableGridState?: {
     currentGrid: NonTextNode;
     maxCols?: number; // 记录表格的最大列数（用于确保 gridCol 足够）
+    loopStartColOffset?: number; // FOR 循环开始时的列偏移量
   };
 };
 
