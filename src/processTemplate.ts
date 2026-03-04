@@ -521,17 +521,10 @@ export async function walkTemplate(
             currentCol: 0,
             mergeMatrix: new Map(),
           };
-          // 记录当前处理的表格节点，用于在离开时调整 gridCol
-          ctx.tableGridState = ctx.tableGridState || {
-            currentGrid: null as any,
-          };
-          ctx.tableGridState.currentTbl = newNode as NonTextNode;
         } else if (tag === 'w:tblGrid') {
-          ctx.tableGridState = ctx.tableGridState || {
-            currentGrid: null as any,
-            currentTbl: undefined as any,
+          ctx.tableGridState = {
+            currentGrid: newNode as NonTextNode,
           };
-          ctx.tableGridState.currentGrid = newNode as NonTextNode;
         } else if (tag === 'w:tr') {
           if (ctx.tableMergeState) {
             ctx.tableMergeState.currentRow++;
@@ -562,9 +555,6 @@ export async function walkTemplate(
 
     loopCount++;
   }
-
-  // 调整所有表格的 w:gridCol 数量
-  adjustAllTablesGridCols(out);
 
   if (ctx.gCntIf !== ctx.gCntEndIf) {
     const err = new IncompleteConditionalStatementError();
@@ -994,146 +984,6 @@ function ensureGridColsEnough(
     const gridCol = newNonTextNode('w:gridCol', { 'w:w': '1500' }, []);
     node._children.push(gridCol);
   }
-}
-
-/**
- * 调整 w:gridCol 数量，使其与表格实际最大列数匹配
- * 通过遍历表格的所有行来确定实际列数
- * @param node w:tblGrid 节点
- * @param ctx 上下文
- */
-function adjustGridColsToMatch(node: NonTextNode, ctx: Context) {
-  // 找到父表格节点
-  const tblNode = ctx.tableGridState?.currentTbl;
-  if (!tblNode) return;
-
-  // 计算表格的实际最大列数
-  let maxCols = 0;
-  for (const child of tblNode._children) {
-    if (child._fTextNode) continue;
-    if (child._tag !== 'w:tr') continue;
-
-    // 统计该行中的单元格数量
-    let colCount = 0;
-    for (const trChild of child._children) {
-      if (trChild._fTextNode) continue;
-      if (trChild._tag === 'w:tc') {
-        colCount++;
-      }
-    }
-    if (colCount > maxCols) {
-      maxCols = colCount;
-    }
-  }
-
-  if (maxCols === 0) return;
-
-  const currentCount = node._children.length;
-
-  // 数量相等，无需调整
-  if (currentCount === maxCols) {
-    return;
-  }
-
-  // w:gridCol 数量多于实际列数，移除多余的
-  if (currentCount > maxCols) {
-    const toRemove = currentCount - maxCols;
-    node._children.splice(maxCols, toRemove);
-    return;
-  }
-
-  // w:gridCol 数量少于实际列数，添加缺失的
-  if (currentCount < maxCols) {
-    const toAdd = maxCols - currentCount;
-    for (let i = 0; i < toAdd; i++) {
-      const gridCol = newNonTextNode('w:gridCol', { 'w:w': '1500' }, []);
-      node._children.push(gridCol);
-    }
-  }
-}
-
-/**
- * 调整输出树中所有表格的 w:gridCol 数量
- * @param rootNode 输出树的根节点
- */
-function adjustAllTablesGridCols(rootNode: Node) {
-  function findAndAdjustTables(node: Node) {
-    if (node._fTextNode) return;
-
-    const nonTextNode = node as NonTextNode;
-    if (nonTextNode._tag === 'w:tbl') {
-      // 找到 w:tblGrid
-      let tblGrid: NonTextNode | undefined;
-      for (const child of nonTextNode._children) {
-        if (!child._fTextNode && (child as NonTextNode)._tag === 'w:tblGrid') {
-          tblGrid = child as NonTextNode;
-          break;
-        }
-      }
-      if (tblGrid) {
-        // 计算表格的实际最大列数（考虑 gridSpan）
-        let maxCols = 0;
-        for (const child of nonTextNode._children) {
-          if (child._fTextNode) continue;
-          if ((child as NonTextNode)._tag !== 'w:tr') continue;
-
-          // 统计该行中的单元格实际占据的列数
-          let colCount = 0;
-          for (const trChild of (child as NonTextNode)._children) {
-            if (trChild._fTextNode) continue;
-            if ((trChild as NonTextNode)._tag === 'w:tc') {
-              const tcNode = trChild as NonTextNode;
-              // 检查是否有 gridSpan
-              let span = 1;
-              for (const tcChild of tcNode._children) {
-                if (tcChild._fTextNode) continue;
-                if ((tcChild as NonTextNode)._tag === 'w:tcPr') {
-                  for (const prChild in (tcChild as NonTextNode)._children) {
-                    const prNode = (tcChild as NonTextNode)._children[prChild];
-                    if (!prNode._fTextNode && (prNode as NonTextNode)._tag === 'w:gridSpan') {
-                      const gridSpanNode = prNode as NonTextNode;
-                      const val = gridSpanNode._attrs?.['w:val'];
-                      if (val) {
-                        span = parseInt(String(val), 10) || 1;
-                      }
-                      break;
-                    }
-                  }
-                  break;
-                }
-              }
-              colCount += span;
-            }
-          }
-          if (colCount > maxCols) {
-            maxCols = colCount;
-          }
-        }
-
-        if (maxCols > 0) {
-          const currentCount = tblGrid._children.length;
-          if (currentCount > maxCols) {
-            // 移除多余的 gridCol
-            tblGrid._children.splice(maxCols);
-          } else if (currentCount < maxCols) {
-            // 添加缺失的 gridCol
-            const toAdd = maxCols - currentCount;
-            for (let i = 0; i < toAdd; i++) {
-              const gridCol = newNonTextNode('w:gridCol', { 'w:w': '1500' }, []);
-              tblGrid._children.push(gridCol);
-            }
-          }
-        }
-      }
-    }
-
-    // 递归处理子节点
-    for (const child of nonTextNode._children) {
-      findAndAdjustTables(child);
-    }
-  }
-
-  findAndAdjustTables(rootNode);
 }
 
 function processSingleColumnWidth(
