@@ -971,15 +971,19 @@ function ensureGridColsEnough(
     return;
   }
 
-  // 更新 maxCols 记录
-  const maxCols = ctx.tableGridState?.maxCols || 0;
-  if (requiredLastColIdx + 1 > maxCols) {
-    ctx.tableGridState!.maxCols = requiredLastColIdx + 1;
-  }
+  // 记录本次需要扩展到的列数
+  const requiredCols = requiredLastColIdx + 1;
 
-  // 添加缺失的 gridCol
+  // 获取之前记录的最大列数（如果有）
+  const prevMaxCols = ctx.tableGridState?.maxCols || 0;
+
+  // 更新 maxCols：取之前记录的和本次需要的较大值
+  const newMaxCols = Math.max(prevMaxCols, requiredCols);
+  ctx.tableGridState!.maxCols = newMaxCols;
+
+  // 添加缺失的 gridCol，但不超过 newMaxCols
   // 注意：只在末尾添加，不在中间插入，因为 gridCol 的顺序应该与列顺序一致
-  const toAdd = requiredLastColIdx - currentCount + 1;
+  const toAdd = Math.min(requiredCols, newMaxCols) - currentCount;
   for (let i = 0; i < toAdd; i++) {
     const gridCol = newNonTextNode('w:gridCol', { 'w:w': '1500' }, []);
     node._children.push(gridCol);
@@ -1287,11 +1291,8 @@ const processEndForIf = (
     curLoop.idx = nextIdx;
   } else {
     // loop finished
-    // 确保循环结束后有足够的 gridCol（处理循环后面还有固定列的情况）
-    if (!isIf && ctx.tableGridState?.currentGrid && ctx.tableMergeState) {
-      const currentCol = ctx.tableMergeState.currentCol;
-      ensureGridColsEnough(ctx.tableGridState.currentGrid, currentCol, 1, ctx);
-      // 清除循环开始时的列偏移量记录
+    // 清除循环开始时的列偏移量记录
+    if (!isIf && ctx.tableGridState) {
       ctx.tableGridState.loopStartColOffset = undefined;
     }
     ctx.loops.pop();
