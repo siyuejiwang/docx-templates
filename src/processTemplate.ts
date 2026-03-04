@@ -1209,7 +1209,8 @@ const processForIf = async (
     // 记录 FOR 循环开始时的列偏移量（用于 TBL_CELL 计算正确的列索引）
     if (!isIf && ctx.tableMergeState) {
       ctx.tableGridState = ctx.tableGridState || { currentGrid: null as any };
-      ctx.tableGridState.loopStartColOffset = ctx.tableMergeState.currentCol;
+      ctx.tableGridState.loopStartColOffset =
+        ctx.tableMergeState.currentCol - 1;
     }
 
     ctx.loops.push({
